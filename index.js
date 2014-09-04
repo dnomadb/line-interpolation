@@ -61,6 +61,10 @@ function interpolateObject(inObj, field, callback) {
 
     var breaks = findBreaks(inObj, field);
 
+    if (breaks.breaks.length === 0) {
+        return callback(null, inObj);
+    }
+
     var output = createBaseReturn(breaks);
 
     for (var i=1; i< breaks.breaks.length; i++) {
