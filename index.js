@@ -1,80 +1,84 @@
-function interpolateObject(inObj, field, callback) {
-    var start = new Date();
+function interpolateResponse(inObj, field, callback) {
 
-    function interpolateBetween(fr, to, field) {
-        var idRange = to.uid - fr.uid;
+    function interpolateBetween(fr, to, frID, toID) {
+        var idRange = toID - frID;
         var outPoints = [];
-        var valueRange = fr[field] - to[field];
+        var valueRange = fr - to;
         for (var i = 1; i < idRange; i++) {
-            var tOut = {
-                uid: i + fr.uid
-            };
-            tOut[field] = (1 - (i / idRange)) * valueRange + to[field];
-            outPoints.push(tOut);
+            outPoints.push((1 - (i / idRange)) * valueRange + to);
         }
         return outPoints;
     }
 
-    function buildObj(id, field, value) {
-        var out = {
-            uid: id
-        };
-        out[field] = value;
-        return out;
-    }
-
     function findBreaks(objArr, field) {
-        var uVals = [];
-        var firstNonNull = 0;
-        for (var i = 0; i < objArr.length; i++) {
-            var oObj;
-            if (objArr[i][field] !== null && uVals.length === 0) {
-                oObj = buildObj(i, field, objArr[i][field]);
-                firstNonNull = i;
-            } else if (objArr[i][field] !== null && objArr[i][field] !== uVals[uVals.length-1]) {
-                oObj = buildObj(i, field, objArr[i][field]);
-            } else if (i === objArr.length-1 && objArr[i][field] !== null) {
-                oObj = buildObj(i, field, objArr[i][field]);
-            } else if (i === objArr.length-1 && uVals.length !== 0) {
-                oObj = buildObj(i, field, uVals[uVals.length-1][field]);
+        var uVals = [0];
+        var idVals = [];
+        var kernel = objArr.slice(0,2).map(function(k) {
+            return k[field];
+        });
+        var nullBreaks = [];
+        for (var i = 1; i < objArr.length-1; i++) {
+            kernel.push(objArr[i+1][field]);
+            var kVal = kernel[0];
+            for (var k = 1; k<3; k++) {
+                if (kernel[k] !== kVal && kernel[1] !== null) {
+                    uVals.push(kernel[1]);
+                    idVals.push(i);
+                    if (kernel[0] === null || kernel[2] === null) {
+                        nullBreaks.push(i);
+                    }
+                    break;
+                }
+                kVal = kernel[k];
             }
-
-            if (oObj) uVals.push(oObj);
+            kernel.shift();
         }
+        uVals.shift();
+        idVals.unshift(0);
+        if (objArr[0][field] != null) {
+            uVals.unshift(objArr[0][field]);
+        } else if (uVals.length !== 0) {
+            uVals.unshift(uVals[0]);
+        }
+        idVals.push(objArr.length-1)
+        if (objArr[objArr.length-1][field] !== null) {
+            uVals.push(objArr[objArr.length-1][field]);
+        } else if (uVals.length !== 0) {
+            uVals.push(uVals[uVals.length-1]);
+        }
+
         return {
-            breaks: uVals,
-            startVal: firstNonNull
+            ids: idVals,
+            breaks: uVals
         };
     }
 
-    function createBaseReturn(breaks) {
-        var output = [];
-        for (var i = 0; i<breaks.startVal+1;i++) {
-            var tOut = {
-                uid: i
-            };
-            tOut[field] = breaks.breaks[0][field];
-            output.push(tOut);
-        }
-        return output;
+    if (typeof(inObj[0][field]) !== 'number') {
+        return callback(null, inObj);
     }
 
     var breaks = findBreaks(inObj, field);
 
     if (breaks.breaks.length === 0) {
         return callback(null, inObj);
+    } else if (breaks.breaks.length == inObj.length) {
+        return callback(null, inObj);
     }
 
-    var output = createBaseReturn(breaks);
+    var output = [breaks.breaks[0]];
 
     for (var i=1; i< breaks.breaks.length; i++) {
-        output = output.concat(interpolateBetween(breaks.breaks[i-1],breaks.breaks[i],field));
+        output = output.concat(interpolateBetween(breaks.breaks[i-1],breaks.breaks[i],breaks.ids[i-1],breaks.ids[i]));
         output.push(breaks.breaks[i]);
     }
-    console.log(new Date()-start);
-    return callback(null, output);
+
+    inObj.map(function(record, i) {
+        record[field] = output[i];
+    });
+
+    return callback(null, inObj);
 }
 
 module.exports = {
-    interpolateObject: interpolateObject
+    interpolateObject: interpolateResponse
 };
